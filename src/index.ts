@@ -3,9 +3,13 @@ import cors from "cors";
 import userRoutes from "./routes/userRoutes.js";
 import topTenRoutes from "./routes/topTenRoutes.js";
 import { authenticateToken } from "./middleware/auth.js";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000; // Use 5000 instead of 3306
 
 // CORS configuration
 const allowedOrigins = [
@@ -42,12 +46,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Base routes
+// Routes
 app.get("/", (_req, res) => {
   res.send("Welcome to Braincoins 2.0 server");
 });
 
-// Mount routes without /api prefix since it's handled by the client
 app.use("/users", userRoutes);
 app.use("/top-ten", topTenRoutes);
 app.use("/dashboard", authenticateToken, userRoutes);
@@ -68,6 +71,27 @@ app.use(
   }
 );
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Start server with error handling
+const startServer = () => {
+  try {
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+
+    server.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") {
+        console.error(
+          `Port ${PORT} is already in use. Please try a different port.`
+        );
+        process.exit(1);
+      } else {
+        console.error("Server error:", error);
+      }
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
+};
+
+startServer();
