@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import { authenticateToken } from "./middleware/auth.js";
 import userRoutes from "./routes/userRoutes.js";
 import topTenRoutes from "./routes/topTenRoutes.js";
-import testRouter from "./routes/testRoute.js";
+import pool from "./config/db.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -10,12 +10,21 @@ const PORT = process.env.PORT || 5000;
 // Middleware to parse JSON
 app.use(express.json());
 
-app.get("/", (req: Request, res: Response) => {
+app.get("/", (_req: Request, res: Response) => {
   res.send("Welcome to Braincoins 2.0 server");
 });
+app.get("/test-db", async (req: Request, res: Response) => {
+  try {
+    const [rows] = await pool.execute("SELECT 1"); // A simple query to test the connection
+    res.json({ message: "Database connection successful!", rows });
+  } catch (error) {
+    console.error("Database connection error:", error);
+    res.status(500).json({ error: "Database connection failed" });
+  }
+});
+
 app.use("/dashboard", authenticateToken, userRoutes);
 app.use("/top-ten", topTenRoutes);
-app.use("/test", testRouter);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
