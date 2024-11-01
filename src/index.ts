@@ -1,8 +1,8 @@
 import express from "express";
 import cors from "cors";
 import userRoutes from "./routes/userRoutes.js";
+import topTenRoutes from "./routes/topTenRoutes.js";
 import { authenticateToken } from "./middleware/auth.js";
-import pool from "./config/db.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -39,20 +39,20 @@ app.use(express.json());
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   console.log("Headers:", req.headers);
-  console.log("Body:", req.body);
   next();
 });
 
-// Routes
-app.use("/api/users", userRoutes); // Mount auth routes at /api/users
-app.use("/api/dashboard", authenticateToken, userRoutes); // Protected routes
-app.use("/api/top-ten", userRoutes); // Public route for top users
-
+// Base routes
 app.get("/", (_req, res) => {
   res.send("Welcome to Braincoins 2.0 server");
 });
 
-// Error handling middleware
+// Mount routes without /api prefix since it's handled by the client
+app.use("/users", userRoutes);
+app.use("/top-ten", topTenRoutes);
+app.use("/dashboard", authenticateToken, userRoutes);
+
+// Error handling
 app.use(
   (
     err: Error,
