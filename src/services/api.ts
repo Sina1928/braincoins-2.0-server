@@ -9,10 +9,10 @@ const api = axios.create({
 
 // Add response interceptor for error handling
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  (response): typeof response => response, // Type the response based on its default type
+  (error): Promise<never> => {
     console.error("API Error:", error.response?.data || error.message);
-    throw error;
+    return Promise.reject(error); // Return a rejected promise for error handling
   }
 );
 
