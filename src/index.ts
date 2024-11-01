@@ -9,13 +9,14 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000; // Use 5000 instead of 3306
+const PORT = process.env.PORT || 5000;
 
 // CORS configuration
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "https://braincoins-2.netlify.app",
+  /^https:\/\/.*--braincoins-2\.netlify\.app$/, // Allow all Netlify preview URLs
 ];
 
 const corsOptions = {
@@ -23,25 +24,44 @@ const corsOptions = {
     origin: string | undefined,
     callback: (err: Error | null, allow?: boolean) => void
   ) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const isAllowed = allowedOrigins.some((allowedOrigin) => {
+      if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin);
+      }
+      return allowedOrigin === origin;
+    });
+
+    if (isAllowed) {
       callback(null, true);
     } else {
+      console.log("Blocked origin:", origin);
       callback(new Error("Not allowed by CORS"));
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
-  optionsSuccessStatus: 204,
+  optionsSuccessStatus: 200,
 };
 
-// Middleware
+// Apply CORS before other middleware
 app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options("*", cors(corsOptions));
+
+// Other middleware
 app.use(express.json());
 
 // Debug middleware
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log("Origin:", req.headers.origin);
   console.log("Headers:", req.headers);
   next();
 });
@@ -51,22 +71,49 @@ app.get("/", (_req, res) => {
   res.send("Welcome to Braincoins 2.0 server");
 });
 
+// Mount routes
 app.use("/users", userRoutes);
-app.use("/top-ten", topTenRoutes);
+app.use("/top-ten", async (req, res, next) => {
+  try {
+    await topTenRoutes(req, res, next);
+  } catch (err) {
+    const error = err as Error;
+    console.error("Error in top-ten route:", error);
+    res.status(500).json({
+      error: "Failed to fetch top users",
+      message:
+        process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
 app.use("/dashboard", authenticateToken, userRoutes);
 
-// Error handling
+// Error interface
+interface ApiError extends Error {
+  status?: number;
+  code?: string;
+}
+
+// Global error handler
 app.use(
   (
-    err: Error,
+    err: unknown,
     req: express.Request,
     res: express.Response,
     next: express.NextFunction
   ) => {
-    console.error(err.stack);
-    res.status(500).json({
+    console.error("Server error:", err);
+
+    const error = err as ApiError;
+    const statusCode = error.status || 500;
+
+    res.status(statusCode).json({
       error: "Internal Server Error",
-      message: err.message,
+      message:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Something went wrong",
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
     });
   }
 );
@@ -76,6 +123,7 @@ const startServer = () => {
   try {
     const server = app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
+      console.log("Allowed origins:", allowedOrigins);
     });
 
     server.on("error", (error: NodeJS.ErrnoException) => {
