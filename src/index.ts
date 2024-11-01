@@ -16,7 +16,7 @@ app.use("/dashboard", authenticateToken, userRoutes);
 app.use("/top-ten", topTenRoutes);
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
 
 // import express, { Request, Response, NextFunction } from 'express';
