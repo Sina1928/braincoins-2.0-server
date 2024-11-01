@@ -1,8 +1,7 @@
-import express, { Request, Response } from "express";
+import express from "express";
 import cors from "cors";
-import { authenticateToken } from "./middleware/auth.js";
 import userRoutes from "./routes/userRoutes.js";
-import topTenRoutes from "./routes/topTenRoutes.js";
+import { authenticateToken } from "./middleware/auth.js";
 import pool from "./config/db.js";
 
 const app = express();
@@ -32,44 +31,42 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-// Apply CORS middleware
+// Middleware
 app.use(cors(corsOptions));
-
-// Middleware to parse JSON
 app.use(express.json());
 
-// Handle preflight requests
-app.options("*", cors(corsOptions));
-
-// Basic route
-app.get("/", (_req: Request, res: Response) => {
-  res.send("Welcome to Braincoins 2.0 server");
-});
-
-// DB test route
-app.get("/test-db", async (_req: Request, res: Response) => {
-  try {
-    const [rows] = await pool.execute("SELECT 1");
-    res.json({ message: "Database connection successful!", rows });
-  } catch (error) {
-    console.error("Database connection error:", error);
-    res.status(500).json({ error: "Database connection failed" });
-  }
+// Debug middleware
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  console.log("Headers:", req.headers);
+  console.log("Body:", req.body);
+  next();
 });
 
 // Routes
-app.use("/users", userRoutes); // For login and registration
-app.use("/dashboard", authenticateToken, userRoutes);
-app.use("/top-ten", topTenRoutes);
+app.use("/api/users", userRoutes); // Mount auth routes at /api/users
+app.use("/api/dashboard", authenticateToken, userRoutes); // Protected routes
+app.use("/api/top-ten", userRoutes); // Public route for top users
+
+app.get("/", (_req, res) => {
+  res.send("Welcome to Braincoins 2.0 server");
+});
 
 // Error handling middleware
-app.use((err: Error, req: Request, res: Response, next: Function) => {
-  console.error(err.stack);
-  res.status(500).json({
-    error: "Internal Server Error",
-    message: err.message,
-  });
-});
+app.use(
+  (
+    err: Error,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error(err.stack);
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: err.message,
+    });
+  }
+);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
