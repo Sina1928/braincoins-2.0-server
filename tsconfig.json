@@ -11,6 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
     "resolveJsonModule": true,
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     "sourceMap": true,
     "baseUrl": "."
   },

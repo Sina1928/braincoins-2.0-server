@@ -1,111 +1,94 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
+import express, { Request, Response } from "express";
+import { authenticateToken } from "./middleware/auth.js";
 import userRoutes from "./routes/userRoutes.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load environment variables
-dotenv.config();
+import topTenRoutes from "./routes/topTenRoutes.js";
 
 const app = express();
-const DEFAULT_PORT = 3000;
-const PORT = Number(process.env.PORT) || DEFAULT_PORT;
+const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    credentials: true,
-  })
-);
-
+// Middleware to parse JSON
 app.use(express.json());
 
-// API Routes
-app.use("/api/users", userRoutes);
+app.get("/", (req: Request, res: Response) => {
+  res.send("Welcome to Braincoins 2.0 server");
+});
+app.use("/dashboard", authenticateToken, userRoutes);
+app.use("/top-ten", topTenRoutes);
 
-// Health check
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    port: PORT,
-  });
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
-// Serve static files in production
-if (process.env.NODE_ENV === "production") {
-  // Serve frontend static files
-  app.use(express.static(path.join(__dirname, "../client/dist")));
+// import express, { Request, Response, NextFunction } from 'express';
+// import cors from 'cors';
+// import dotenv from 'dotenv';
+// import jwt from 'jsonwebtoken';
+// import axios from 'axios';
 
-  // Handle all other routes by serving the index.html
-  app.get("*", (_req, res) => {
-    res.sendFile(path.join(__dirname, "../client/dist/index.html"));
-  });
-} else {
-  // Development welcome message
-  app.get("/", (_req, res) => {
-    res.json({
-      message: "Welcome to Braincoins 2.0's Server",
-      endpoints: {
-        health: "/api/health",
-        users: "/api/users",
-        login: "/api/users/login",
-        topTen: "/api/users/top-ten",
-        profile: "/api/users/profile/:id",
-      },
-    });
-  });
-}
+// // Initialize environment variables
+// dotenv.config();
 
-// Error handling middleware
-app.use(
-  (
-    err: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    console.error(err.stack);
-    res.status(500).json({ error: "Something broke!" });
-  }
-);
+// const app = express();
+// const PORT = process.env.PORT || 5000;
 
-// 404 handler
-app.use((_req, res) => {
-  res.status(404).json({ error: "Route not found" });
-});
+// // CORS setup to allow requests from the Netlify frontend
+// const allowedOrigins = ['https://your-netlify-site.netlify.app'];
+// app.use(cors({
+//   origin: allowedOrigins,
+// }));
 
-// Start server with error handling
-const startServer = async () => {
-  try {
-    const server = app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
+// // Middleware for JSON parsing
+// app.use(express.json());
 
-    // Handle server errors
-    server.on("error", (error: NodeJS.ErrnoException) => {
-      if (error.code === "EADDRINUSE") {
-        console.log(`Port ${PORT} is in use, trying ${DEFAULT_PORT + 1}`);
-        server.close();
-        app.listen(DEFAULT_PORT + 1, "0.0.0.0", () => {
-          console.log(`Server running on http://localhost:${DEFAULT_PORT + 1}`);
-        });
-      } else {
-        console.error("Server error:", error);
-        process.exit(1);
-      }
-    });
-  } catch (error) {
-    console.error("Failed to start server:", error);
-    process.exit(1);
-  }
-};
+// // Middleware for verifying JWT token
+// const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+//   const token = req.headers['authorization']?.split(' ')[1];
+//   if (!token) return res.status(401).json({ error: 'Access token required' });
 
-startServer();
+//   jwt.verify(token, process.env.JWT_SECRET as string, (err, user) => {
+//     if (err) return res.status(403).json({ error: 'Invalid token' });
+//     req.user = user;
+//     next();
+//   });
+// };
 
-export default app;
+// // Route to get top ten users by total_value
+// app.get('/api/topten', async (req: Request, res: Response) => {
+//   try {
+//     const response = await axios.get(`${process.env.API_BASE_URL}/users/topten`);
+//     res.json(response.data);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: 'Failed to retrieve top ten users' });
+//   }
+// });
+
+// // Protected route for user profile, requires JWT authorization
+// app.get('/api/dashboard', authenticateToken, async (req: Request, res: Response) => {
+//   try {
+//     const userId = req.user?.id;
+//     const response = await axios.get(`${process.env.API_BASE_URL}/users/profile`, {
+//       params: { userId },
+//     });
+//     res.json(response.data);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: 'Failed to retrieve user profile' });
+//   }
+// });
+
+// // Catch-all for undefined routes
+// app.use((req: Request, res: Response) => {
+//   res.status(404).json({ error: 'API endpoint not found' });
+// });
+
+// // Error handling middleware
+// app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
+//   console.error(error);
+//   res.status(500).json({ error: 'Internal server error' });
+// });
+
+// // Start server
+// app.listen(PORT, () => {
+//   console.log(`Server is running on port ${PORT}`);
+// });
