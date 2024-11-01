@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import { authenticateToken } from "./middleware/auth.js";
 import userRoutes from "./routes/userRoutes.js";
 import topTenRoutes from "./routes/topTenRoutes.js";
+import testRouter from "./routes/testRoute.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -14,6 +15,7 @@ app.get("/", (req: Request, res: Response) => {
 });
 app.use("/dashboard", authenticateToken, userRoutes);
 app.use("/top-ten", topTenRoutes);
+app.use("/test", testRouter);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
