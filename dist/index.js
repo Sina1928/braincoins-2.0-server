@@ -2,12 +2,23 @@ import express from "express";
 import { authenticateToken } from "./middleware/auth.js";
 import userRoutes from "./routes/userRoutes.js";
 import topTenRoutes from "./routes/topTenRoutes.js";
+import pool from "./config/db.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 // Middleware to parse JSON
 app.use(express.json());
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
     res.send("Welcome to Braincoins 2.0 server");
+});
+app.get("/test-db", async (req, res) => {
+    try {
+        const [rows] = await pool.execute("SELECT 1"); // A simple query to test the connection
+        res.json({ message: "Database connection successful!", rows });
+    }
+    catch (error) {
+        console.error("Database connection error:", error);
+        res.status(500).json({ error: "Database connection failed" });
+    }
 });
 app.use("/dashboard", authenticateToken, userRoutes);
 app.use("/top-ten", topTenRoutes);
