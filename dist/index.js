@@ -10,7 +10,7 @@ app.use(express.json());
 app.get("/", (_req, res) => {
     res.send("Welcome to Braincoins 2.0 server");
 });
-app.get("/test-db", async (req, res) => {
+app.get("/test-db", async (_req, res) => {
     try {
         const [rows] = await pool.execute("SELECT 1"); // A simple query to test the connection
         res.json({ message: "Database connection successful!", rows });
