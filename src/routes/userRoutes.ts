@@ -2,20 +2,14 @@ import express from "express";
 import bcryptjs from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pool from "../config/db.js";
-import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { RowDataPacket } from "mysql2";
 
 const router = express.Router();
 
-interface User extends RowDataPacket {
+interface UserWithBalance extends RowDataPacket {
   id: number;
   username: string;
   email: string;
-  password: string;
-}
-
-interface Balance extends RowDataPacket {
-  id: number;
-  user_id: number;
   umer_coins: number;
   mark_bucks: number;
   kcoins: number;
@@ -23,19 +17,40 @@ interface Balance extends RowDataPacket {
   neo_coins: number;
 }
 
+const calculateTotalValue = (balance: {
+  umer_coins: number;
+  mark_bucks: number;
+  kcoins: number;
+  corgi_coins: number;
+  neo_coins: number;
+}): number => {
+  return (
+    (balance.umer_coins || 0) * (100 / 500) +
+    (balance.mark_bucks || 0) +
+    (balance.kcoins || 0) * 500 +
+    (balance.corgi_coins || 0) * 500 +
+    (balance.neo_coins || 0) * 1000
+  );
+};
+
 // Login route
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validate input
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
-    }
-
-    // Get user
-    const [users] = await pool.execute<User[]>(
-      "SELECT * FROM users WHERE email = ?",
+    // Get user with balance in a single query
+    const [users] = await pool.execute<UserWithBalance[]>(
+      `
+      SELECT u.*, 
+        b.umer_coins, 
+        b.mark_bucks, 
+        b.kcoins, 
+        b.corgi_coins, 
+        b.neo_coins
+      FROM users u
+      LEFT JOIN balances b ON u.id = b.user_id
+      WHERE u.email = ?
+    `,
       [email.toLowerCase()]
     );
 
@@ -45,35 +60,37 @@ router.post("/login", async (req, res) => {
 
     const user = users[0];
 
-    // Check password
+    // Verify password
     const validPassword = await bcryptjs.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Generate JWT
+    // Calculate total value
+    const totalValueInMarkBucks = calculateTotalValue(user);
+
+    // Generate token
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET || "your-secret-key",
       { expiresIn: "24h" }
     );
 
-    // Get user balances
-    const [balances] = await pool.execute<Balance[]>(
-      "SELECT * FROM balances WHERE user_id = ?",
-      [user.id]
-    );
-
-    const userBalance = balances.length > 0 ? balances[0] : null;
-
-    // Send response
+    // Send response without password
     res.json({
       token,
       user: {
         id: user.id,
         username: user.username,
         email: user.email,
-        balances: userBalance,
+        balances: {
+          "Umer coins": user.umer_coins,
+          "Mark bucks": user.mark_bucks,
+          Kcoins: user.kcoins,
+          CorgiCoins: user.corgi_coins,
+          "Neo Coins": user.neo_coins,
+        },
+        totalValueInMarkBucks,
       },
     });
   } catch (error) {
@@ -82,72 +99,88 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// Get top users
+router.get("/top-ten", async (_req, res) => {
+  try {
+    const [users] = await pool.execute<UserWithBalance[]>(`
+      SELECT u.id, u.username,
+        b.umer_coins, 
+        b.mark_bucks, 
+        b.kcoins, 
+        b.corgi_coins, 
+        b.neo_coins
+      FROM users u
+      LEFT JOIN balances b ON u.id = b.user_id
+      ORDER BY (
+        b.mark_bucks + 
+        (b.umer_coins * 0.2) + 
+        (b.kcoins * 500) + 
+        (b.corgi_coins * 500) + 
+        (b.neo_coins * 1000)
+      ) DESC
+      LIMIT 10
+    `);
+
+    const topUsers = users.map((user) => ({
+      id: user.id,
+      username: user.username,
+      "Umer coins": user.umer_coins,
+      "Mark bucks": user.mark_bucks,
+      Kcoins: user.kcoins,
+      CorgiCoins: user.corgi_coins,
+      "Neo Coins": user.neo_coins,
+      totalValueInMarkBucks: calculateTotalValue(user),
+    }));
+
+    res.json(topUsers);
+  } catch (error) {
+    console.error("Error fetching top users:", error);
+    res.status(500).json({ error: "Error fetching top users" });
+  }
+});
+
 // Get user profile
 router.get("/profile/:id", async (req, res) => {
   try {
-    const userId = req.params.id;
-
-    const [users] = await pool.execute<User[]>(
-      "SELECT id, username, email FROM users WHERE id = ?",
-      [userId]
+    const [users] = await pool.execute<UserWithBalance[]>(
+      `
+      SELECT u.id, u.username, u.email,
+        b.umer_coins, 
+        b.mark_bucks, 
+        b.kcoins, 
+        b.corgi_coins, 
+        b.neo_coins
+      FROM users u
+      LEFT JOIN balances b ON u.id = b.user_id
+      WHERE u.id = ?
+    `,
+      [req.params.id]
     );
 
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const [balances] = await pool.execute<Balance[]>(
-      "SELECT * FROM balances WHERE user_id = ?",
-      [userId]
-    );
-
-    const userBalance = balances.length > 0 ? balances[0] : null;
+    const user = users[0];
+    const totalValueInMarkBucks = calculateTotalValue(user);
 
     res.json({
-      user: users[0],
-      balances: userBalance,
-    });
-  } catch (error) {
-    console.error("Profile fetch error:", error);
-    res.status(500).json({ error: "Error fetching profile" });
-  }
-});
-
-// Get user balances
-router.get("/balances/:userId", async (req, res) => {
-  try {
-    const userId = req.params.userId;
-
-    const [balances] = await pool.execute<Balance[]>(
-      "SELECT * FROM balances WHERE user_id = ?",
-      [userId]
-    );
-
-    if (balances.length === 0) {
-      return res.status(404).json({ error: "Balances not found" });
-    }
-
-    const totalValueInMarkBucks = calculateTotalValue(balances[0]);
-
-    res.json({
-      ...balances[0],
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      balances: {
+        "Umer coins": user.umer_coins,
+        "Mark bucks": user.mark_bucks,
+        Kcoins: user.kcoins,
+        CorgiCoins: user.corgi_coins,
+        "Neo Coins": user.neo_coins,
+      },
       totalValueInMarkBucks,
     });
   } catch (error) {
-    console.error("Balance fetch error:", error);
-    res.status(500).json({ error: "Error fetching balances" });
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ error: "Error fetching user profile" });
   }
 });
-
-// Helper function to calculate total value in Mark Bucks
-function calculateTotalValue(balance: Balance): number {
-  return (
-    (balance.umer_coins || 0) * (100 / 500) +
-    (balance.mark_bucks || 0) +
-    (balance.kcoins || 0) * 500 +
-    (balance.corgi_coins || 0) * 500 +
-    (balance.neo_coins || 0) * 1000
-  );
-}
 
 export default router;
